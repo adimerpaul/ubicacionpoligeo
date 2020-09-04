@@ -1,0 +1,6 @@
+"permissions": {
+  "desktop-notification": {
+    "description": "Needed for creating system notifications."
+  }
+},
+"messages": [{"notification": "index.html"}]

@@ -1,0 +1,273 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+
+    <title>Quick Start - Leaflet</title>
+
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css" integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ==" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js" integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew==" crossorigin=""></script>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/push.js/0.0.11/push.min.js"></script>
+
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+        #map {
+            width: 600px;
+            height: 400px;
+        }
+        #datos {
+            position: absolute;
+            top: 40px;
+            right: 0px;
+            /*padding: 10px;*/
+            z-index: 400;
+            text-align: right;
+        }
+    </style>
+    <style>body { padding: 0; margin: 0; } #map { height: 100%; width: 100vw; }</style>
+</head>
+<body>
+
+
+
+<div id="map" ></div>
+
+<div id="datos">
+    <button class="btn btn-info " id="avisa" hidden>Avisarme!</button>
+    <label id="distancia"></label>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js" integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js" integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew==" crossorigin=""></script>
+
+<script>
+    var socket = io();
+    var map = L.map('map').setView([-17.976961, -67.109801], 14);
+    $('#exampleModal').on('shown.bs.modal', function () {
+        $('#name').trigger('focus')
+    })
+    var marker=[];
+    var motor=[];
+    var boolmsg=false;
+    // var moto1=L.marker([0,0]).addTo(map);
+    var myIcon = L.icon({
+        iconUrl: './moto.png',
+        iconSize: [35,35]
+    });
+    var myHome = L.icon({
+        iconUrl: './home.png',
+        iconSize: [35,35]
+    });
+
+    L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw', {
+        maxZoom: 18,
+        attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, ' +
+            '<a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' +
+            'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+        id: 'mapbox/streets-v11',
+        tileSize: 512,
+        zoomOffset: -1
+    }).addTo(map);
+    var milat=0;
+    var milng=0;
+    function onLocationFound(e) {
+        var radius = e.accuracy / 8;
+        milat=e.latlng.lat;
+        milng=e.latlng.lng;
+        L.marker(e.latlng,{icon:myHome}).addTo(map)
+            .bindPopup("Usted esta a " + radius.toFixed(2) + " metros de este punto").openPopup();
+        L.circle(e.latlng, radius).addTo(map);
+    }
+
+    function onLocationError(e) {
+        alert(e.message);
+    }
+
+    map.on('locationfound', onLocationFound);
+    map.on('locationerror', onLocationError);
+
+    map.locate({setView: true, maxZoom: 16});
+
+
+    //
+    // L.marker([51.5, -0.09]).addTo(map)
+    //     .bindPopup("<b>Hello world!</b><br />I am a popup.").openPopup();
+    socket.on('Places', msgs =>{
+        for(i=0;i<marker.length;i++) {
+            map.removeLayer(marker[i]);
+        }
+        marker=[];
+        for(let i = msgs.length -1; i >=0 ; i--) {
+            var lamMarker=new L.marker([msgs[i].lat,msgs[i].lng])
+                .bindPopup("<b>Pedido a nombre de:  </b>"+msgs[i].name)
+                .openPopup();
+            marker.push(lamMarker);
+        }
+        for(i=0;i<marker.length;i++) {
+            map.addLayer(marker[i]);
+        }
+
+    });
+    socket.on('load old msgs', msgs =>{
+        for(i=0;i<marker.length;i++) {
+            map.removeLayer(marker[i]);
+        }
+        marker=[];
+        for(let i = msgs.length -1; i >=0 ; i--) {
+            var lamMarker=new L.marker([msgs[i].lat,msgs[i].lng])
+                .bindPopup("<b>Pedido a nombre de:  </b>"+msgs[i].name)
+                .openPopup();
+            marker.push(lamMarker);
+        }
+        for(i=0;i<marker.length;i++) {
+            map.addLayer(marker[i]);
+        }
+
+    });
+    socket.on('chat message', function(msg){
+        let latlgn=msg.split('/');
+        // map.removeLayer(moto1);
+        // moto1=new L.marker([latlgn[0], latlgn[1]],{icon:myIcon}).addTo(map);
+        // console.log(list);
+        const index=list.findIndex(item=>item.name===latlgn[2]);
+        // console.log(index);
+        if (index==-1){
+            list.push({name:latlgn[2],lat:latlgn[0],lng:latlgn[1]});
+        }else{
+            list[index]={name:latlgn[2],lat:latlgn[0],lng:latlgn[1]};
+        }
+    });
+    // var list=[{name:'a',lat:-17.995622,lng: -67.134626}];
+    var list=[];
+    var count = 0,timer;
+    // var counter = function(){
+    //     count++;
+    //     alert(motor.length);
+    //     if (count > 15) { count = 1; }
+    //     // console.log(count);
+    //     for(i=0;i<motor.length;i++) {
+    //         map.removeLayer(motor[i]);
+    //     }
+    //     motor=[];
+    //     for(let i = list.length -1; i >=0 ; i--) {
+    //         var newPoint=new L.marker([list[i].lat,list[i].lng],{icon:myIcon})
+    //             .bindPopup("<b>Repartidor: </b>"+list[i].name)
+    //             .openPopup();
+    //         motor.push(newPoint);
+    //         var distance = map.distance([milat,milng] ,[list[i].lat,list[i].lng]);
+    //         // console.log(distance);
+    //         if (boolmsg==false && distance<=200){
+    //             var title = "TU PEPIDO "
+    //             var extra = {
+    //                 icon: "./moto.png",
+    //                 body: "Esta a menos de 200 mtrs"
+    //             }
+    //             // Lanzamos la notificación
+    //             new Notification( title, extra);
+    //             boolmsg=true;
+    //         }
+    //     }
+    //     for(i=0;i<motor.length;i++) {
+    //
+    //         map.addLayer(motor[i]);
+    //     }
+    //
+    //
+    //     timer = setTimeout(function(){
+    //         counter();
+    //     }, 2000);
+    // };
+    // counter();
+    var myVar = setInterval(myTimer ,2000);
+    async function myTimer() {
+        // var d = new Date();
+        // alert(d);
+            count++;
+            // alert(list.length);
+            // if (count > 15) { count = 1; }
+            // console.log(count);
+            for (i=0;i<motor.length;i++) {
+                await map.removeLayer(motor[i]);
+            }
+            motor=[];
+            for(let i = list.length -1; i >=0 ; i--) {
+                var newPoint=await new L.marker([list[i].lat,list[i].lng],{icon:myIcon})
+                    .bindPopup("<b>Repartidor: </b>"+list[i].name)
+                    .openPopup();
+                motor.push(newPoint);
+                mindis=100000;
+                var distance = await map.distance([milat,milng] ,[list[i].lat,list[i].lng]);
+                
+                // console.log(distance);
+                // if (boolmsg==false && distance<=200){
+                //     var title = "TU PEPIDO "
+                //     var extra = {
+                //         icon: "./moto.png",
+                //         body: "Esta a menos de 200 mtrs"
+                //     }
+                //     // Lanzamos la notificación
+                //     new Notification( title, extra);
+                //     boolmsg=true;
+                // }
+            }
+            for(i=0;i<motor.length;i++) {
+                await map.addLayer(motor[i]);
+            }
+
+    }
+
+    $('#avisa').click(function (e) {
+
+        navigator.serviceWorker.getRegistration().then(reg=>{
+           reg.showNotification('hello');
+        });
+        // navigator.vibrate(1000);
+        // Push.Permission.request();
+        // Push.create('Hi there!', {
+        //     body: 'This is a notification.',
+        //     icon: '/moto.png',
+        //     timeout: 8000,               // Timeout before notification closes automatically.
+        //     vibrate: [100, 100, 100],    // An array of vibration pulses for mobile devices.
+        //     onClick: function() {
+        //         // Callback for when the notification is clicked.
+        //         console.log(this);
+        //     }
+        // });
+        // Notification.requestPermission().then(res=>{
+        //     // console.log(res)
+        //     if (res!="granted"){
+        //         alert("Tienes que dar permiso de Notificacion!")
+        //     }else{
+        //         navigator.geolocation.getCurrentPosition(function () {
+        //             // console.log('si')
+        //             // alert("Te avisara cuando este cerca!")
+        //
+        //         }, function(error){
+        //             // console.log('no')
+        //             alert("Tienes que dar permiso de Ubicacion")
+        //         });
+        //     }
+        // });
+
+        e.preventDefault();
+    });
+
+
+</script>
+
+
+
+</body>
+</html>
